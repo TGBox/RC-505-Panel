@@ -1,7 +1,7 @@
 [project]
 name = "rc-505-panel"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "A GUI Panel for controlling the RC-505 Loopstation by BOSS."
 readme = "README.md"
 authors = [
     { name = "Daniel Rösch", email = "droesch91@gmail.com" }
