@@ -6,8 +6,8 @@ readme = "README.md"
 authors = [
     { name = "Daniel Rösch", email = "droesch91@gmail.com" }
 ]
-requires-python = ">=3.14"
-dependencies = []
+requires-python = ">=3.12"
+dependencies = ["mido", "python-rtmidi", "sounddevice", "soundfile", "numpy"]
 
 [project.scripts]
 rc-505-panel = "rc_505_panel:main"

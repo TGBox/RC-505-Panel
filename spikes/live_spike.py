@@ -2,7 +2,7 @@
 # requires-python = ">=3.12"
 # dependencies = ["mido", "python-rtmidi", "sounddevice", "soundfile", "numpy"]
 # ///
-"""Spike S1 – Live-Machbarkeit der RC-505mkII (Wegwerf-Code, siehe Spec §6).
+"""Spike S1 - Live-Machbarkeit der RC-505mkII (Wegwerf-Code, siehe Spec §6).
 
 Aufruf (uv liest die Abhängigkeiten aus dem Kopf dieser Datei):
     uv run spikes/live_spike.py list
