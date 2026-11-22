@@ -141,7 +141,7 @@ def render_for_memory(src: Path, target_bpm: float, bars: int | None,
 ```python
 # storage/track_import.py
 def import_to_track(drive: Path, ref: TrackRef, clip: AudioClip) -> None: ...
-    # 1. Backup von MEMORYxxxA/B + WAVE/xxx_y nach %LOCALAPPDATA%/rc505studio/backups/<ts>/
+    # 1. Backup von MEMORYxxxA/B + WAVE/xxx_y nach %LOCALAPPDATA%/rc-505-panel/backups/<ts>/
     # 2. write_rc_wav(drive/ROLAND/WAVE/xxx_y/xxx_y.WAV)
     # 3. Rc0Document: TRACKy.X = clip.frames (+ weitere Felder laut Storage-Spike)
     # 4. save()
@@ -236,7 +236,7 @@ Wie `ASSIGNn/<A…>` kodiert ist, ermitteln wir per Diff: ein Assign am Gerät s
 rc505mk2-studio/
 ├── pyproject.toml            # uv; PySide6, mido, python-rtmidi, sounddevice, soundfile, numpy, scipy
 ├── spikes/                   # wird verworfen, kein Produktionscode
-├── src/rc505studio/
+├── src/rc_505_panel/
 │   ├── core/      models.py · actions.py · device_watch.py · config.py
 │   ├── audio/     convert.py · tempo.py · stretch.py · rcwav.py
 │   ├── storage/   rc0.py · rc0_schema.py · track_import.py · backup.py

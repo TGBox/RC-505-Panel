@@ -1,6 +1,6 @@
 dist/
 build/
-__pychache__
+__pycache__
 .env
 .venv
 venv
