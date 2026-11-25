@@ -1,4 +1,4 @@
-"""Kommandozeile für den Offline-Kern (bis die GUI aus Phase 3 steht).
+"""Kommandozeile. Ohne Argumente startet die GUI: `uv run rc-505-panel`.
 
     uv run rc-505-panel import --drive J: --mem 98 --track 4 --src loop.mp3 --bpm 104 [--bars 2]
     uv run rc-505-panel info --drive J: --mem 98
@@ -141,6 +141,9 @@ def _cmd_calibrate_measure(a: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    if argv is None and len(sys.argv) == 1:      # ohne Argumente → GUI
+        from .ui.app import run
+        sys.exit(run())
     p = argparse.ArgumentParser(prog="rc-505-panel", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     s = p.add_subparsers(dest="cmd", required=True)

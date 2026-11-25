@@ -7,13 +7,16 @@ authors = [
     { name = "Daniel Rösch", email = "droesch91@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = ["mido", "python-rtmidi", "sounddevice", "soundfile", "numpy", "scipy"]
+dependencies = ["mido", "python-rtmidi", "sounddevice", "soundfile", "numpy", "scipy", "PySide6"]
 
 [dependency-groups]
 dev = ["pytest"]
 
 [project.scripts]
 rc-505-panel = "rc_505_panel:main"
+
+[project.gui-scripts]
+rc-505-panel-gui = "rc_505_panel.ui.app:run"
 
 [build-system]
 requires = ["uv_build>=0.12.6,<0.13.0"]

@@ -152,7 +152,7 @@ class Rc0Document:
         keys = sorted(self.paths("mem/NAME/"))
         if not name.isascii() or len(name) > len(keys):
             raise ValueError(f"Name muss ASCII und max. {len(keys)} Zeichen sein")
-        for k, ch in zip(keys, name.ljust(len(keys))):
+        for k, ch in zip(keys, name.ljust(len(keys)), strict=True):
             self.set(k, ord(ch))
 
     # ---------- Schreiben ----------

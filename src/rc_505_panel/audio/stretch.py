@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ..core.models import SR, AudioClip, frames_per_bar, loop_frames
+from ..core.models import AudioClip, frames_per_bar, loop_frames
 from .convert import load_for_rc, write_float_wav
 from .rcwav import read_rc_wav
 from .tempo import TempoEstimate, estimate_tempo
