@@ -52,9 +52,13 @@ class MainWindow(QMainWindow):
         self._build()
         self._bind_keys()
 
-        self.watch = QTimer(self, interval=1000, timeout=self._poll_device)
+        self.watch = QTimer(self)
+        self.watch.setInterval(1000)
+        self.watch.timeout.connect(self._poll_device)
         self.watch.start()
-        self.clock_timer = QTimer(self, interval=250, timeout=self._update_clock)
+        self.clock_timer = QTimer(self)
+        self.clock_timer.setInterval(250)
+        self.clock_timer.timeout.connect(self._update_clock)
         self.clock_timer.start()
         self._poll_device()
         from ..audio.stretch import rubberband_available
@@ -66,15 +70,18 @@ class MainWindow(QMainWindow):
     # ---------- Aufbau ----------
 
     def _build(self) -> None:
-        top = QFrame(objectName="TopBar")
+        top = QFrame()
+        top.setObjectName("TopBar")
         tl = QHBoxLayout(top)
-        self.badge = QLabel("OFFLINE", objectName="ModeBadge")
+        self.badge = QLabel("OFFLINE")
+        self.badge.setObjectName("ModeBadge")
         self.mem = QSpinBox()
         self.mem.setRange(1, 99)
         self.mem.setPrefix("Memory ")
         self.mem.setValue(98)
         self.mem.valueChanged.connect(self._on_memory_changed)
-        self.mem_name = QLabel("", objectName="Muted")
+        self.mem_name = QLabel("")
+        self.mem_name.setObjectName("Muted")
         self.bpm = QDoubleSpinBox()
         self.bpm.setDecimals(1)
         self.bpm.setRange(40.0, 250.0)
@@ -82,7 +89,8 @@ class MainWindow(QMainWindow):
         self.bpm.setSuffix(" BPM")
         self.bpm.setValue(120.0)
         self.bpm.setToolTip("Tempo des Memory – darauf werden Samples gestreckt")
-        self.clock = QLabel("Clock: –", objectName="Muted")
+        self.clock = QLabel("Clock: –")
+        self.clock.setObjectName("Muted")
         self.offset = QDoubleSpinBox()
         self.offset.setDecimals(1)
         self.offset.setRange(-500.0, 500.0)
@@ -135,7 +143,8 @@ class MainWindow(QMainWindow):
             self.tree.hideColumn(col)
         self.tree.setHeaderHidden(True)
 
-        self.logview = QPlainTextEdit(readOnly=True)
+        self.logview = QPlainTextEdit()
+        self.logview.setReadOnly(True)
         self.logview.setMaximumBlockCount(500)
 
         center = QSplitter(Qt.Orientation.Vertical)
