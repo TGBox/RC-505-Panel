@@ -7,7 +7,7 @@
 Das Gerät muss im STORAGE-Modus verbunden sein (MENU > USB > STORAGE: CONNECT).
 
     uv run spikes/storage_spike.py backup --drive E: --name 00-ausgang
-    uv run spikes/storage_spike.py diff backups/00-ausgang backups/01-assign --mem 98
+    uv run spikes/storage_spike.py diff backups/00-ausgang backups/01-eingerichtet --mem 98 --out diff-01.txt
     uv run spikes/storage_spike.py write-wav --drive E: --mem 98 --track 3 --src click.wav [--set-frames]
 
 Backups landen in ./backups/<name>/ROLAND/DATA (alle .RC0) und ./backups/<name>/ROLAND/WAVE/<mem>_*.
@@ -38,7 +38,7 @@ SR = 44_100
 VALUE = re.compile(r"^\s*<(\w+)>(-?\d+)</\1>\s*$")
 OPEN = re.compile(r"^\s*<(\w+)(?:\s+id=\"(\d+)\")?[^>/]*>\s*$")
 CLOSE = re.compile(r"^\s*</(\w+)>\s*$")
-COUNT = re.compile(r"<count>(\d+)</count>")
+COUNT = re.compile(r"<count>([0-9A-Fa-f]+)</count>")  # hexadezimal, z. B. 000F
 
 
 # ---------- RC0 ----------
@@ -50,7 +50,8 @@ def rc0_values(path: Path) -> tuple[dict[str, int], int | None]:
     stack: list[str] = []
     for line in text.splitlines():
         if m := VALUE.match(line):
-            vals["/".join(stack + [m[1]])] = int(m[2])
+            if m[1] != "count":  # <count> ist hexadezimal und wird separat gelesen
+                vals["/".join(stack + [m[1]])] = int(m[2])
         elif m := CLOSE.match(line):
             if stack and stack[-1].split("#")[0] == m[1]:
                 stack.pop()
@@ -59,7 +60,7 @@ def rc0_values(path: Path) -> tuple[dict[str, int], int | None]:
                 continue
             stack.append(m[1])
     c = COUNT.search(text)
-    return vals, int(c[1]) if c else None
+    return vals, int(c[1], 16) if c else None
 
 
 def current_rc0(data_dir: Path, mem: int) -> tuple[Path, int | None]:
@@ -129,6 +130,16 @@ def cmd_backup(a):
 
 
 def cmd_diff(a):
+    if a.out:
+        import contextlib
+        with open(a.out, "w", encoding="utf-8") as fh, contextlib.redirect_stdout(fh):
+            _diff(a)
+        print(f"Diff geschrieben: {a.out}")
+    else:
+        _diff(a)
+
+
+def _diff(a):
     def base(p: str) -> Path:
         q = Path(p)
         for c in (q / "ROLAND", q):
@@ -143,7 +154,8 @@ def cmd_diff(a):
             ca = rc0_values(fa)[1] if fa.exists() else None
             cb = rc0_values(fb)[1] if fb.exists() else None
             same = fa.exists() and fb.exists() and fa.read_bytes() == fb.read_bytes()
-            print(f"{ab}: count {ca} -> {cb}  {'(unverändert)' if same else '(geändert)'}")
+            fmt = lambda c: "-" if c is None else f"{c:04X}"  # noqa: E731
+            print(f"{ab}: count {fmt(ca)} -> {fmt(cb)}  {'(unverändert)' if same else '(geändert)'}")
         pa, _ = current_rc0(A / "DATA", mem)
         pb, _ = current_rc0(B / "DATA", mem)
         va, _ = rc0_values(pa)
@@ -193,6 +205,7 @@ def main(argv=None):
     c.add_argument("--mem", type=int, nargs="*", help="Memories, deren WAVs mitgesichert werden")
     c = s.add_parser("diff"); c.add_argument("before"); c.add_argument("after")
     c.add_argument("--mem", type=int, nargs="+", required=True)
+    c.add_argument("--out", help="Ergebnis als UTF-8-Datei schreiben (statt PowerShell-Umleitung >)")
     c = s.add_parser("write-wav"); c.add_argument("--drive", required=True)
     c.add_argument("--mem", type=int, required=True); c.add_argument("--track", type=int, required=True)
     c.add_argument("--src", required=True); c.add_argument("--set-frames", action="store_true",
