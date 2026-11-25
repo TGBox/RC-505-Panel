@@ -60,6 +60,18 @@ def test_measure_per_beat(shift):
     assert m.per_beat_frames == [shift] * 3
     assert abs(m.offset_ms - shift / SR * 1000) < 1e-6 and m.length_delta == 0
     assert m.suggested_offset(-53.5) == round(-53.5 - shift / SR * 1000, 2)
+    assert m.valid
+
+
+def test_measure_rejects_silence_and_garbage():
+    ref = make_click(104, 1)
+    silent = measure(ref, np.zeros_like(ref), 104)                 # so sah die Aufnahme am 25.11. aus
+    assert not silent.valid and "still" in silent.problem
+    rng = np.random.default_rng(0)
+    noise = measure(ref, rng.standard_normal(ref.shape).astype(np.float32) * 0.1, 104)
+    assert not noise.valid
+    longer = measure(ref, np.vstack([ref, np.zeros((500, 2), np.float32)]), 104)
+    assert not longer.valid and "MEASURE" in longer.problem
 
 
 def test_settings_roundtrip(tmp_path):
@@ -150,6 +162,19 @@ def test_drop_timing_and_states():
     rec = [s for s in midi.sent if s[1] == 23]                 # Spur 3 → CC#23
     assert [v for _, _, v in rec] == [127, 0]                  # nur REC, kein Schließ-CC (ADR-0002)
     assert 0.025 < true_t - rec[0][0] < 0.035                  # CC ~30 ms vor dem Taktanfang
+
+
+def test_close_by_cc_is_sent_early():
+    midi, audio = FakeMidi(), FakeAudio()
+    s = LiveSettings(offset_ms=-52.0, cc_lead_ms=30.0, release=False, close_by_cc=True)
+    clip = np.zeros((loop_frames(BPM, 1), 2), np.float32)
+    job = AutoDropEngine(midi, audio, s, min_lead_s=0.3).drop(2, clip, block=True)
+    midi.close()
+    assert job.state == DropState.DONE, job.error
+    sends = [ts for ts, c, v in midi.sent if c == 22 and v == 127]
+    assert len(sends) == 2
+    end = midi.true_bar_time(job.plan.target_tick) + len(clip) / SR
+    assert 0.025 < end - sends[1] < 0.035                       # Schließ-CC ~30 ms vor Taktende
 
 
 def test_drop_aborts_on_restart():

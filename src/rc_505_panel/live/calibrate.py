@@ -24,12 +24,33 @@ def make_click(bpm: float, bars: int = 1) -> np.ndarray:
     return x
 
 
+MAX_SPREAD_MS = 5.0        # mehr Streuung zwischen den Schlägen einer Aufnahme = kein Click darauf
+MIN_PEAK = 1e-3            # darunter gilt die Aufnahme als still
+
+
 @dataclass(frozen=True)
 class Measurement:
     per_beat_frames: list[int]
     offset_ms: float           # + = Aufnahme kommt zu spät
     spread_ms: float
     length_delta: int          # Frames Aufnahme − Referenz
+    peak: float = 1.0
+
+    @property
+    def problem(self) -> str | None:
+        """Grund, warum die Messung nicht verwendet werden darf (None = gültig)."""
+        if self.peak < MIN_PEAK:
+            return "Die Aufnahme ist still – der Click ist nicht auf der Spur gelandet (INPUT der Spur = INST2?)"
+        if self.spread_ms > MAX_SPREAD_MS:
+            return (f"Die Schläge der Aufnahme passen nicht zum Click (Streuung {self.spread_ms:.0f} ms) – "
+                    "andere Aufnahme auf der Spur, falsches Tempo oder Overdub?")
+        if self.length_delta != 0:
+            return f"Die Spur ist {self.length_delta:+d} Frames länger/kürzer als ein Takt – MEASURE = 1?"
+        return None
+
+    @property
+    def valid(self) -> bool:
+        return self.problem is None
 
     def suggested_offset(self, current_offset_ms: float) -> float:
         """Neuer `offset_ms`: kommt die Aufnahme zu spät, muss das Audio früher starten."""
@@ -48,8 +69,6 @@ def measure(ref: np.ndarray, rec: np.ndarray, bpm: float) -> Measurement:
         if lo < 0 or hi > len(r) or hi > len(x):
             continue
         a, b = r[lo:hi], x[lo:hi]
-        if not np.any(b):
-            continue
         n = 1 << int(np.ceil(np.log2(2 * len(a))))
         cc = np.fft.irfft(np.fft.rfft(b, n) * np.conj(np.fft.rfft(a, n)), n)
         lag = int(np.argmax(cc))
@@ -57,7 +76,8 @@ def measure(ref: np.ndarray, rec: np.ndarray, bpm: float) -> Measurement:
             lag -= n
         if abs(lag) < half:
             lags.append(lag)
+    peak = float(np.abs(x).max()) if len(x) else 0.0
     if not lags:
-        raise ValueError("Keine Schläge auswertbar – passt die Aufnahme zum Click (Tempo, Spur)?")
+        return Measurement([], 0.0, float("inf"), len(x) - len(r), peak)
     med = float(np.median(lags))
-    return Measurement(lags, med / SR * 1000, (max(lags) - min(lags)) / SR * 1000, len(x) - len(r))
+    return Measurement(lags, med / SR * 1000, (max(lags) - min(lags)) / SR * 1000, len(x) - len(r), peak)

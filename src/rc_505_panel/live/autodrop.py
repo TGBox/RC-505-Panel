@@ -50,6 +50,8 @@ class DropJob:
     state: DropState = DropState.WAITING_CLOCK
     plan: DropPlan | None = None
     cc_early_ms: float | None = None        # tatsächlicher Vorlauf des REC-CC
+    audio_played: bool | None = None        # hat die Audio-Ausgabe den Clip vollständig abgespielt?
+    tag: str = ""                           # frei für die UI, z. B. "calibration"
     error: str | None = None
     finished: threading.Event = field(default_factory=threading.Event)
     _cancel: threading.Event = field(default_factory=threading.Event)
@@ -83,10 +85,10 @@ class AutoDropEngine:
 
     # ---------- öffentlich ----------
 
-    def drop(self, track: int, clip: np.ndarray, block: bool = False) -> DropJob:
+    def drop(self, track: int, clip: np.ndarray, block: bool = False, tag: str = "") -> DropJob:
         if str(track) not in self.s.rec_play_cc:
             raise ValueError(f"Keine REC/PLAY-CC für Spur {track} konfiguriert")
-        job = DropJob(track, len(clip))
+        job = DropJob(track, len(clip), tag=tag)
         th = threading.Thread(target=self._run, args=(job, np.ascontiguousarray(clip, np.float32)),
                               name=f"autodrop-{track}", daemon=True)
         th.start()
@@ -143,7 +145,7 @@ class AutoDropEngine:
             off = self.s.offset_ms / 1000
             lead = self.s.cc_lead_ms / 1000
             job.plan = DropPlan(k, est.time, est.time + off, est.time - lead, est.jitter_ms, clock.bpm or 0.0)
-            self.audio.play_at(clip, job.plan.audio_at)
+            played = self.audio.play_at(clip, job.plan.audio_at)
             self._set(job, DropState.ARMED)
 
             # Zielzeit nachschärfen, bis kurz vor dem Audiostart bzw. dem CC
@@ -167,13 +169,14 @@ class AutoDropEngine:
             self._set(job, DropState.RECORDING)
 
             end = job.plan.target_time + len(clip) / SR
-            if self.s.close_by_cc:   # Fallback zu ADR-0002
-                self._sleep_until(end, job, lambda: None)
+            if self.s.close_by_cc:   # Fallback zu ADR-0002; mit QUANTIZE = MEASURE ebenfalls etwas früher
+                self._sleep_until(end - lead, job, lambda: None)
                 self.midi.cc(rec_cc, 127, release=self.s.release)
             while self._now() < end + 0.2:
                 if job._cancel.is_set():
                     raise DropAborted("abgebrochen")
                 time.sleep(0.02)
+            job.audio_played = bool(played.wait(0.5)) if played is not None else None
             self._set(job, DropState.DONE)
         except DropAborted as e:
             self.audio.cancel()

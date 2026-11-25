@@ -10,7 +10,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QDir, Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
+    QCheckBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
     QSpinBox, QSplitter, QTreeView, QVBoxLayout, QWidget,
 )
 
@@ -46,6 +46,7 @@ class MainWindow(QMainWindow):
         self.engine = None
         self.slots: dict[int, tuple] = {}          # Spur -> (Samples, Beschreibung)
         self.pending_calibration: tuple[int, int, float] | None = None   # (Memory, Spur, BPM)
+        self._last_measured: str | None = None                            # Hash der zuletzt gemessenen WAV
         self._bridge = _Bridge()
         self._bridge.drop_state.connect(self._on_drop_state)
         self._build()
@@ -82,13 +83,29 @@ class MainWindow(QMainWindow):
         self.bpm.setValue(120.0)
         self.bpm.setToolTip("Tempo des Memory – darauf werden Samples gestreckt")
         self.clock = QLabel("Clock: –", objectName="Muted")
+        self.offset = QDoubleSpinBox()
+        self.offset.setDecimals(1)
+        self.offset.setRange(-500.0, 500.0)
+        self.offset.setSingleStep(0.5)
+        self.offset.setPrefix("Offset ")
+        self.offset.setSuffix(" ms")
+        self.offset.setValue(self.settings.live.offset_ms)
+        self.offset.setToolTip("Kalibrier-Offset: um so viel wird das Audio gegenüber dem Taktanfang verschoben "
+                               "(S1: −52 ms bei WASAPI)")
+        self.offset.editingFinished.connect(self._offset_edited)
+        self.close_cc = QCheckBox("Loop-Schluss per CC")
+        self.close_cc.setChecked(self.settings.live.close_by_cc)
+        self.close_cc.setToolTip("Aus (Standard, ADR-0002): Das Gerät schließt über MEASURE der Spur – "
+                                 "MEASURE muss der Taktzahl des Samples entsprechen.\n"
+                                 "An: Das Tool sendet am Ende einen zweiten REC/PLAY-CC – dann MEASURE = AUTO/FREE.")
+        self.close_cc.toggled.connect(self._close_cc_toggled)
         self.btn_cal = QPushButton("Kalibrieren …")
         self.btn_cal.clicked.connect(lambda: self.bus.dispatch(Action("calibrate")))
         self.btn_measure = QPushButton("Kalibrierung messen")
         self.btn_measure.clicked.connect(self._measure_calibration)
         self.btn_backup = QPushButton("Backup")
         self.btn_backup.clicked.connect(self._backup)
-        for w in (self.badge, self.mem, self.mem_name, self.bpm, self.clock):
+        for w in (self.badge, self.mem, self.mem_name, self.bpm, self.clock, self.offset, self.close_cc):
             tl.addWidget(w)
         tl.addStretch()
         for w in (self.btn_cal, self.btn_measure, self.btn_backup):
@@ -302,11 +319,24 @@ class MainWindow(QMainWindow):
         elif a.name == "calibrate":
             self._start_calibration()
 
-    def _start_drop(self, track: int, samples) -> None:
+    def _offset_edited(self) -> None:
+        v = round(self.offset.value(), 2)
+        if v != self.settings.live.offset_ms:
+            self.settings.live.offset_ms = v
+            self.settings.save()
+            self.log(f"Offset auf {v:+.1f} ms gesetzt")
+
+    def _close_cc_toggled(self, on: bool) -> None:
+        self.settings.live.close_by_cc = on
+        self.settings.save()
+        self.log("Loop-Schluss: " + ("per CC (Spur-MEASURE = AUTO/FREE)" if on
+                                      else "durch das Gerät (Spur-MEASURE = Taktzahl des Samples)"))
+
+    def _start_drop(self, track: int, samples, tag: str = "") -> None:
         if not self.engine:
             self.log("Kein Audio-Ausgang – Drop nicht möglich")
             return
-        self.engine.drop(track, samples)
+        self.engine.drop(track, samples, tag=tag)
         if not self.midi.clock.ready:
             self.log("Warte auf Clock – am Gerät STOP und dann ALL START drücken")
 
@@ -318,16 +348,17 @@ class MainWindow(QMainWindow):
             DropState.ARMED: (f"scharf: Takt {job.plan.target_tick // 96 + 1}, Jitter {job.plan.jitter_ms:.1f} ms"
                               if job.plan else "scharf"),
             DropState.RECORDING: f"nimmt auf (CC {job.cc_early_ms:.1f} ms vorher)" if job.cc_early_ms else "nimmt auf",
-            DropState.DONE: "fertig – Spur spielt",
+            DropState.DONE: ("fertig – Spur spielt" if job.audio_played is not False
+                             else "fertig, aber das Audio wurde NICHT abgespielt (Ausgabe prüfen)"),
             DropState.FAILED: f"Fehler: {job.error}",
             DropState.CANCELLED: "abgebrochen",
         }
         strip.set_state(job.state.name, texts[job.state])
         if job.state in (DropState.DONE, DropState.FAILED, DropState.CANCELLED):
             self.log(f"Drop Spur {job.track}: {texts[job.state]}")
-            if job.state is DropState.DONE and self.pending_calibration and self.pending_calibration[1] == job.track:
-                self.log("Kalibrier-Click liegt auf der Spur. Jetzt WRITE, dann STORAGE → CONNECT und "
-                         "„Kalibrierung messen“ klicken.")
+            if job.state is DropState.DONE and job.tag == "calibration":
+                self.log("Kalibrier-Click gedroppt. Prüfen: Läuft auf der Spur ein Click (Rhythmus aus)? "
+                         "Dann WRITE, STORAGE → CONNECT und „Kalibrierung messen“ klicken.")
 
     # ---------- Kalibrierung ----------
 
@@ -343,19 +374,29 @@ class MainWindow(QMainWindow):
         if r != QMessageBox.StandardButton.Yes:
             return
         self.pending_calibration = (self.mem.value(), track, bpm)
-        self._start_drop(track, make_click(bpm, 1))
+        self._start_drop(track, make_click(bpm, 1), tag="calibration")
 
     def _measure_calibration(self) -> None:
         if not (self.pending_calibration and self.status.roland):
             return
         from ..audio.rcwav import read_rc_wav
         from ..live.calibrate import make_click, measure
+        import hashlib
         mem, track, bpm = self.pending_calibration
         wav = self.status.roland / "WAVE" / f"{mem:03d}_{track}" / f"{mem:03d}_{track}.WAV"
         try:
+            digest = hashlib.sha1(wav.read_bytes()).hexdigest()
+            if digest == self._last_measured:
+                raise ValueError("Die Datei ist unverändert seit der letzten Messung – nach dem Drop WRITE vergessen?")
             m = measure(make_click(bpm, 1), read_rc_wav(wav), bpm)
         except Exception as e:  # noqa: BLE001
             self.log(f"Messung fehlgeschlagen: {e}")
+            QMessageBox.warning(self, "Kalibrierung", str(e))
+            return
+        self._last_measured = digest
+        if not m.valid:
+            self.log(f"Messung verworfen: {m.problem}")
+            QMessageBox.warning(self, "Kalibrierung", f"Messung verworfen:\n{m.problem}\n\nDer Offset bleibt unverändert.")
             return
         cur = self.settings.live.offset_ms
         new = m.suggested_offset(cur)
@@ -366,6 +407,7 @@ class MainWindow(QMainWindow):
                                  f"Offset {cur:+.2f} ms → {new:+.2f} ms übernehmen?")
         if r == QMessageBox.StandardButton.Yes:
             self.settings.live.offset_ms = new
+            self.offset.setValue(new)
             self.log(f"Offset gespeichert: {new:+.2f} ms ({self.settings.save()})")
 
     # ---------- Backup ----------
