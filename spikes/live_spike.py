@@ -46,6 +46,7 @@ class ClockFollower:
         self.tick = 0                 # Ticks seit START (0 = Downbeat Takt 1)
         self.last_tick_time: float | None = None
         self.intervals: list[float] = []
+        self.orphan_ticks = 0         # Clock-Ticks ohne vorheriges START (Position unbekannt)
         self.lock = threading.Lock()
 
     def feed(self, msg_type: str, t: float | None = None) -> None:
@@ -58,6 +59,8 @@ class ClockFollower:
                 self.running = False
             elif msg_type == "continue":
                 self.running = True
+            elif msg_type == "clock" and not self.running:
+                self.orphan_ticks += 1
             elif msg_type == "clock" and self.running:
                 if self.last_tick_time is not None:
                     self.intervals.append(t - self.last_tick_time)
@@ -182,7 +185,12 @@ def cmd_drop(a):
     f = ClockFollower()
     out, inp = open_midi(a.port, f)
     print("Warte auf laufende Clock… (ALL START am Gerät, falls noch nicht gestartet)")
+    warned = False
     while f.next_downbeat() is None:
+        if f.orphan_ticks > PPQN and not warned:
+            print("Clock läuft, aber das START-Signal kam vor dem Skriptstart – Taktposition unbekannt.\n"
+                  "→ Am Gerät STOP drücken und dann erneut ALL START.")
+            warned = True
         time.sleep(0.05)
     print(f"Clock läuft: {f.bpm:.2f} BPM")
 
