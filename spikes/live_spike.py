@@ -100,6 +100,26 @@ def open_midi(hint: str, follower: ClockFollower | None = None):
     return out, inp
 
 
+def resolve_output_device(query):
+    """Index oder Suchwörter (Reihenfolge und Groß-/Kleinschreibung egal) → eindeutiger Ausgabe-Index."""
+    import sounddevice as sd
+    if query is None or isinstance(query, int):
+        return query
+    words = str(query).lower().split()
+    hits = []
+    for i, d in enumerate(sd.query_devices()):
+        if d["max_output_channels"] <= 0:
+            continue
+        full = f"{d['name']}, {sd.query_hostapis(d['hostapi'])['name']}"
+        if all(w in full.lower() for w in words):
+            hits.append((i, full))
+    if len(hits) != 1:
+        found = "\n  ".join(f"[{i}] {n}" for i, n in hits) or "(keins)"
+        sys.exit(f"Ausgabegerät '{query}' nicht eindeutig gefunden:\n  {found}")
+    print(f"Ausgabegerät: [{hits[0][0]}] {hits[0][1]}")
+    return hits[0][0]
+
+
 def send_cc(out, cc: int, value: int, channel: int) -> None:
     import mido
     out.send(mido.Message("control_change", control=cc, value=value, channel=channel))
@@ -182,6 +202,7 @@ def cmd_drop(a):
     import sounddevice as sd
 
     clip = read_any_wav(a.wav)
+    device = resolve_output_device(a.device)  # vor dem Warten prüfen, nicht erst am Downbeat
     f = ClockFollower()
     out, inp = open_midi(a.port, f)
     print("Warte auf laufende Clock… (ALL START am Gerät, falls noch nicht gestartet)")
@@ -226,7 +247,7 @@ def cmd_drop(a):
             raise sd.CallbackStop
 
     nch = a.ch0 + 2
-    with sd.OutputStream(device=a.device, samplerate=SR, channels=nch, dtype="float32",
+    with sd.OutputStream(device=device, samplerate=SR, channels=nch, dtype="float32",
                          latency=a.latency, callback=callback) as stream:
         print(f"Stream-Latenz laut PortAudio: {stream.latency * 1000:.1f} ms")
         # CC zum Downbeat senden, optional früher (bei REC QUANTIZE = MEASURE nötig,
