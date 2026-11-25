@@ -79,6 +79,11 @@ Am Gerät: SYSTEM → MIDI → **Clock Out / Sync Out = ON**. Dann `uv run spike
 - 2. Versuch, in dieser Reihenfolge: Spur leeren → **danach** LOOP SYNC = ON und MEASURE = 1 setzen → kontrollieren → Drop ohne `--close-cc`. **Die Aufnahme stoppt nach genau einem Takt von selbst.**
 - Vermutung: Das Leeren der Spur setzt MEASURE zurück, oder die erste Einstellung wurde nicht übernommen. Noch zu prüfen.
 - Folge für ADR-0002: Bestätigt, sofern MEASURE vor dem Drop gesetzt ist. MEASURE ist laut Parameter Guide kein Assign-Ziel, lässt sich also nicht per MIDI setzen. Es muss vorab in der `.RC0` stehen, sonst greift der Fallback `--close-cc`.
+- **Leeren setzt ein explizit gesetztes MEASURE nicht zurück** (bleibt 1). Eine Länge, die per AUTO aus einer Aufnahme entstanden ist (8), springt beim Leeren auf AUTO zurück. Daraus folgt: Ein MEASURE, das vorab in der `.RC0` steht, hält über beliebig viele Drops und Leerungen.
+
+**§5b Ergebnis 2026-11-25 – QUANTIZE = MEASURE + `--cc-lead-ms 30` ✅**
+- Die Aufnahme startet auf dem nächsten Taktanfang nach dem CC, nicht einen Takt zu spät. Der Vorlauf von 30 ms reicht.
+- Damit ist das die bevorzugte Konfiguration: Das Gerät bestimmt Start (QUANTIZE) und Ende (MEASURE) selbst. Die Genauigkeit hängt nur noch an der Audio-Latenz (§6).
 
 1. Gerät schließt die Aufnahme selbst (A3)
 
