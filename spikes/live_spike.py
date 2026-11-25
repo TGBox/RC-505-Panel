@@ -47,6 +47,8 @@ class ClockFollower:
         self.last_tick_time: float | None = None
         self.intervals: list[float] = []
         self.orphan_ticks = 0         # Clock-Ticks ohne vorheriges START (Position unbekannt)
+        self.starts = 0               # Anzahl empfangener START-Meldungen (Diagnose)
+        self.start_time: float | None = None
         self.lock = threading.Lock()
 
     def feed(self, msg_type: str, t: float | None = None) -> None:
@@ -54,6 +56,8 @@ class ClockFollower:
         with self.lock:
             if msg_type == "start":
                 self.running, self.tick, self.last_tick_time = True, 0, None
+                self.starts += 1
+                self.start_time = t
                 self.intervals.clear()
             elif msg_type == "stop":
                 self.running = False
@@ -259,10 +263,16 @@ def cmd_drop(a):
             pass
         send_cc(out, a.cc, 127, a.channel)
         t_sent = time.perf_counter()
+        tick_at_send = f.tick
         if a.release:
             send_cc(out, a.cc, 0, a.channel)
         print(f"REC-CC gesendet {(target - t_sent) * 1000:.2f} ms vor dem Downbeat "
               f"(Soll: {a.cc_lead_ms:.1f} ms)")
+        bar, pos = divmod(tick_at_send, TICKS_PER_BAR)
+        print(f"Diagnose: START empfangen {f.starts}x, CC bei Tick {tick_at_send} "
+              f"= Takt {bar + 1}, Position {pos}/{TICKS_PER_BAR} (erwartet: {TICKS_PER_BAR - 1}/{TICKS_PER_BAR} oder 0), "
+              f"Ziel-Downbeat {(target - f.start_time):.3f} s nach START, "
+              f"Taktlänge {TICKS_PER_BAR * f.tick_interval:.3f} s")
         dur = len(clip) / SR
         if a.close_cc:
             # Fallback (ADR-0002): Aufnahme per zweitem CC schließen
