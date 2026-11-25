@@ -21,8 +21,18 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-from rcwav_prototype import build_rc_wav  # noqa: E402
+
+def _load_rcwav():
+    """Lädt spikes/rcwav_prototype.py über den Dateipfad (für Pyrefly/Pylance ohne sys.path-Trick)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("rcwav_prototype", Path(__file__).with_name("rcwav_prototype.py"))
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.build_rc_wav
+
+
+build_rc_wav = _load_rcwav()
 
 SR = 44_100
 VALUE = re.compile(r"^\s*<(\w+)>(-?\d+)</\1>\s*$")
