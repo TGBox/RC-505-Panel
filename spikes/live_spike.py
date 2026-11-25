@@ -224,6 +224,7 @@ def cmd_drop(a):
     if target - time.perf_counter() < 0.5:
         target += TICKS_PER_BAR * f.tick_interval
     audio_target = target + a.offset_ms / 1000.0
+    starts_at_plan = f.starts  # kommt danach ein weiteres START/STOP, ist das Ziel ungültig
 
     pos = {"i": None}
     clock_map = {}  # Zuordnung Stream-Zeit -> perf_counter, beim ersten Callback
@@ -258,6 +259,10 @@ def cmd_drop(a):
         # sonst wartet das Gerät bei minimaler Verspätung einen ganzen Takt)
         cc_at = target - a.cc_lead_ms / 1000.0
         while (rest := cc_at - time.perf_counter()) > 0.003:
+            if f.starts != starts_at_plan or not f.running:
+                stream.abort()
+                sys.exit("Abbruch: START/STOP am Gerät während der Wartezeit – Taktposition hat sich geändert.\n"
+                         "Spur prüfen/leeren und den Drop neu starten (STOP + ALL START nur einmal drücken).")
             time.sleep(min(rest - 0.002, 0.05))
         while time.perf_counter() < cc_at:
             pass
