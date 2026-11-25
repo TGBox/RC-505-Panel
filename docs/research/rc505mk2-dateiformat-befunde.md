@@ -34,3 +34,14 @@ Quelle: `D:\RC 505 mk2 - Backup\ROLAND` (Stichprobe: MEMORY001A/B, SYSTEM1, WAVE
 - Akzeptiert das Gerät auch Standard-WAVs ohne Padding / mit 16/24 Bit? (BTS for RC importiert diese – evtl. konvertiert BTS)
 - Bedeutung der anonymen Tags (TRACK, ASSIGN, ROUTING)
 - Welche `.RC0`-Felder außer `TRACKn/X` muss ein Import anpassen, damit das Gerät die Spur als belegt erkennt? (Spike S2)
+
+## Update 2026-11-25 (Diff `00-ausgang` → `01-eingerichtet`, Memory 98)
+- **`<count>` ist hexadezimal** (`000D`, `000E` → `000F`, `0010`).
+- **A/B (A5 bestätigt):** Pro WRITE schreibt das Gerät in den *älteren* Slot und vergibt den nächsten Count. Bei zwei Speichervorgängen wurde abwechselnd A (`000F`), dann B (`0010`) geschrieben.
+- **ASSIGN-Kodierung (A6, teilweise):**
+  - `ASSIGNn/A` = SW (0 = OFF, 1 = ON)
+  - `ASSIGNn/C` = SOURCE als Index. CC#21 → 59, CC#26 → 64, also **Index = 38 + CC-Nummer** für CC#01–31. Das passt zur Liste im Parameter Guide: 30 Spur-Quellen + 3 Sync/Knob + 6 CTL/EXP = 39 Einträge vor CC#01.
+  - `ASSIGNn/H` = TARGET als Index: 0 = TRK1 REC/PLY, 2 = TRK1 STOP (also vermutlich 1 = TRK1 PLY/STP)
+  - SOURCE MODE und ACT LO/HI sind bei den Standardwerten (MOMENT, 0, 127) unverändert geblieben → vermutlich B/D/E mit Standard 0/0/127. Noch nicht belegt.
+- **Vermutlich Tempo:** `MASTER/A` = Memory-Tempo × 10 (910 → 830, also 91,0 → 83,0 BPM). `MASTER/B` ≈ Taktlänge in Frames. Ebenso `TRACKn/U` = Spurtempo × 10, `TRACKn/V` = Taktlänge in Frames (116307 = 4 × 60/91 × 44100). `TRACKn/X` = Gesamtlänge in Frames (465228 = 4 Takte), `TRACKn/W` = 1, wenn die Spur Daten hat (Hypothese).
+- Noch unklar: `REC/B` 1 → 0 (vermutlich QUANTIZE MEASURE → OFF), `TRACK1/J,M,R,S` (MEASURE, LOOP SYNC, TEMPO SYNC …), `RHYTHM/M`, `PLAY/F`, `MASTER/D`, `ifx/AD/A`.
