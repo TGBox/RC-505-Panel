@@ -264,3 +264,16 @@ rc505mk2-studio/
 - [ADR-0003](../adr/2026-11-18-rc0-roundtrip-parser.md): Eigener roundtrip-treuer `.RC0`-Parser
 - [ADR-0004](../adr/2026-11-18-stretch-vorab-rendern.md): Time-Stretch immer vorab rendern
 - [ADR-0005](../adr/2026-11-18-action-bus-eingaben.md): Alle Eingaben über einen Action-Bus
+
+## 10. Stand nach Phase 1 (2026-11-25) – Abweichungen vom Plan
+
+| Thema | Plan (§3) | Umgesetzt / belegt |
+|---|---|---|
+| Spur-Import (C7) | WAV schreiben + `TRACKn/X` in `.RC0` setzen | **Nur WAV schreiben.** Das Gerät ergänzt `TRACKn` U/V/W/X beim Laden selbst (S2). Die `.RC0` bleibt unberührt. |
+| `Rc0Document` | `get(section, key)` | `get(path)` / `set(path, value)` mit Pfad wie `mem/TRACK1/X`, weil Sektionsnamen in `ifx` und `tfx` doppelt vorkommen |
+| Loop-Länge | `round(bars·4·60/bpm·44100)` | wie das Gerät: `bars × floor(4·60·44100/bpm)` (`core.models.loop_frames`, belegt mit 91 und 104 BPM) |
+| Memory-Tempo | `MASTER/A` | `MASTER/A` ist nicht verlässlich. Tempo kommt aus einer belegten Spur (`TRACKn/U` / 10) oder wird vorgegeben (`--bpm`). |
+| Stretch-Backend | offen (ADR-0004) | Standard: eigene WSOLA (512/256/±128, Schläge ≤ 3,5 ms genau), automatisch Rubber Band, falls die CLI vorhanden ist. Hörtest steht noch aus. |
+| Paketname | `rc505studio` | `rc_505_panel` |
+
+**Akzeptanzkriterien:** AC1 ✅ (2 × 198 echte Dateien) · AC2 ✅ · AC4 ✅ (Test mit Dateisystem) · AC5 ✅ · AC3 offen (Import am Gerät mit `rc-505-panel import`).
