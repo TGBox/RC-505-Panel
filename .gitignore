@@ -6,3 +6,6 @@ __pycache__
 venv
 backups/
 diff-*.txt
+# Test-Clicks im Projektordner (Fixtures unter tests/ bleiben versioniert)
+/*.wav
+/*.WAV
