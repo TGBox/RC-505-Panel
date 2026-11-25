@@ -36,6 +36,7 @@ Quelle: `D:\RC 505 mk2 - Backup\ROLAND` (Stichprobe: MEMORY001A/B, SYSTEM1, WAVE
 - Welche `.RC0`-Felder außer `TRACKn/X` muss ein Import anpassen, damit das Gerät die Spur als belegt erkennt? (Spike S2)
 
 ## Update 2026-11-25 (Diff `00-ausgang` → `01-eingerichtet`, Memory 98)
+
 - **`<count>` ist hexadezimal** (`000D`, `000E` → `000F`, `0010`).
 - **A/B (A5 bestätigt):** Pro WRITE schreibt das Gerät in den *älteren* Slot und vergibt den nächsten Count. Bei zwei Speichervorgängen wurde abwechselnd A (`000F`), dann B (`0010`) geschrieben.
 - **ASSIGN-Kodierung (A6, teilweise):**

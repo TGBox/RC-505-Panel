@@ -82,7 +82,7 @@ Am Gerät: SYSTEM → MIDI → **Clock Out / Sync Out = ON**. Dann `uv run spike
 - Folge für ADR-0002: Bestätigt, sofern MEASURE vor dem Drop gesetzt ist. MEASURE ist laut Parameter Guide kein Assign-Ziel, lässt sich also nicht per MIDI setzen. Es muss vorab in der `.RC0` stehen, sonst greift der Fallback `--close-cc`.
 - **Leeren setzt ein explizit gesetztes MEASURE nicht zurück** (bleibt 1). Eine Länge, die per AUTO aus einer Aufnahme entstanden ist (8), springt beim Leeren auf AUTO zurück. Daraus folgt: Ein MEASURE, das vorab in der `.RC0` steht, hält über beliebig viele Drops und Leerungen.
 
-**§5b Ergebnis 2026-11-25 – QUANTIZE = MEASURE + `--cc-lead-ms 30` ✅**
+## **§5b Ergebnis 2026-11-25 – QUANTIZE = MEASURE + `--cc-lead-ms 30` ✅**
 
 - Die Aufnahme startet auf dem nächsten Taktanfang nach dem CC, nicht einen Takt zu spät. Der Vorlauf von 30 ms reicht.
 - Damit ist das die bevorzugte Konfiguration: Das Gerät bestimmt Start (QUANTIZE) und Ende (MEASURE) selbst. Die Genauigkeit hängt nur noch an der Audio-Latenz (§6).
@@ -123,7 +123,7 @@ Einstellungen: INST2-Drop, MEASURE = 1, QUANTIZE = MEASURE, `--cc-lead-ms 30`, `
 **Messreihe A** (alte Zielberechnung, korrigiert ausgewertet). Die alte Ganz-Loop-Korrelation hatte bei Lauf 1 und 5 um ganze Schläge danebengelegen. Korrigiert ergibt sich:
 
 | Lauf | Versatz |
-|---|---|
+| --- | --- |
 | 1 | +4,76 ms (−25 232 Frames = −1 Schlag + 210) |
 | 2 | −1,95 ms |
 | 3 | −0,50 ms |
@@ -133,7 +133,7 @@ Einstellungen: INST2-Drop, MEASURE = 1, QUANTIZE = MEASURE, `--cc-lead-ms 30`, `
 **Messreihe B** (Ausgleichsgerade über die Clock-Ticks, Uhrenabgleich im Hauptthread, Auswertung pro Schlag):
 
 | Lauf | Clock-Jitter | Versatz |
-|---|---|---|
+| --- | --- | --- |
 | 1 | 0,45 ms | −2,70 ms |
 | 2 | 0,47 ms | −0,45 ms |
 | 3 | 0,49 ms | −0,66 ms |
