@@ -65,7 +65,7 @@ Am Gerät: SYSTEM → MIDI → **Clock Out / Sync Out = ON**. Dann `uv run spike
 **Ergebnis 2026-11-25.** Geprüft wurde bei der *Wiedergabe* der Spur (Rhythmus aus), nicht beim Mithören während der Aufnahme. Während der Aufnahme reicht das Gerät USB nur an den Ausgang durch.
 
 | # | PC-Ausgang | TRACK 1 INPUT | Click auf Spur 1? |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 4e | MAIN | alle aus | ❌ nein |
 | 4e′ | INST2 | alle aus | ❌ nein |
 | 4a | INST2 | nur INST2 L/R | ✅ ja |
@@ -74,14 +74,16 @@ Am Gerät: SYSTEM → MIDI → **Clock Out / Sync Out = ON**. Dann `uv run spike
 **Fazit A1 ✅:** Der PC-Ausgang „INST2“ (WASAPI-Endpunkt) landet nur am Spur-Eingang INST2. Damit lässt sich USB-Audio gezielt auf eine Spur legen, und INST2 wird der Drop-Kanal.
 **Konsequenz:** Die Buchse INST2 am Gerät bleibt für Drops frei. Ein dort eingestecktes Instrument würde mit aufgenommen (noch nicht getestet).
 
-**§5a Ergebnis 2026-11-25 – MEASURE schließt selbst (A3) ✅ (mit Bedingung)**
+- **§5a Ergebnis 2026-11-25 – MEASURE schließt selbst (A3) ✅ (mit Bedingung)**
+
 - 1. Versuch: Die Aufnahme lief nach einem Takt weiter. Danach zeigte MEASURE 8 (die tatsächlich aufgenommene Länge). Die Vorgabe 1 hatte also nicht gegriffen.
-- 2. Versuch, in dieser Reihenfolge: Spur leeren → **danach** LOOP SYNC = ON und MEASURE = 1 setzen → kontrollieren → Drop ohne `--close-cc`. **Die Aufnahme stoppt nach genau einem Takt von selbst.**
+- 1. Versuch, in dieser Reihenfolge: Spur leeren → **danach** LOOP SYNC = ON und MEASURE = 1 setzen → kontrollieren → Drop ohne `--close-cc`. **Die Aufnahme stoppt nach genau einem Takt von selbst.**
 - Vermutung: Das Leeren der Spur setzt MEASURE zurück, oder die erste Einstellung wurde nicht übernommen. Noch zu prüfen.
 - Folge für ADR-0002: Bestätigt, sofern MEASURE vor dem Drop gesetzt ist. MEASURE ist laut Parameter Guide kein Assign-Ziel, lässt sich also nicht per MIDI setzen. Es muss vorab in der `.RC0` stehen, sonst greift der Fallback `--close-cc`.
 - **Leeren setzt ein explizit gesetztes MEASURE nicht zurück** (bleibt 1). Eine Länge, die per AUTO aus einer Aufnahme entstanden ist (8), springt beim Leeren auf AUTO zurück. Daraus folgt: Ein MEASURE, das vorab in der `.RC0` steht, hält über beliebig viele Drops und Leerungen.
 
 **§5b Ergebnis 2026-11-25 – QUANTIZE = MEASURE + `--cc-lead-ms 30` ✅**
+
 - Die Aufnahme startet auf dem nächsten Taktanfang nach dem CC, nicht einen Takt zu spät. Der Vorlauf von 30 ms reicht.
 - Damit ist das die bevorzugte Konfiguration: Das Gerät bestimmt Start (QUANTIZE) und Ende (MEASURE) selbst. Die Genauigkeit hängt nur noch an der Audio-Latenz (§6).
 
@@ -114,11 +116,41 @@ Spur 1: **MEASURE = 1** setzen. Dann `drop` ohne `--close-cc`:
 
 ---
 
+## §6 Ergebnis 2026-11-25 – Timing ✅
+
+Einstellungen: INST2-Drop, MEASURE = 1, QUANTIZE = MEASURE, `--cc-lead-ms 30`, `--offset-ms -53.5`, WASAPI (22 ms laut PortAudio), 104 BPM.
+
+**Messreihe A** (alte Zielberechnung, korrigiert ausgewertet). Die alte Ganz-Loop-Korrelation hatte bei Lauf 1 und 5 um ganze Schläge danebengelegen. Korrigiert ergibt sich:
+
+| Lauf | Versatz |
+|---|---|
+| 1 | +4,76 ms (−25 232 Frames = −1 Schlag + 210) |
+| 2 | −1,95 ms |
+| 3 | −0,50 ms |
+| 4 | −2,36 ms (nur Schlag 1, Callback-Absturz) |
+| 5 | −6,28 ms (pro Schlag −277, −277, −277 Frames) |
+
+**Messreihe B** (Ausgleichsgerade über die Clock-Ticks, Uhrenabgleich im Hauptthread, Auswertung pro Schlag):
+
+| Lauf | Clock-Jitter | Versatz |
+|---|---|---|
+| 1 | 0,45 ms | −2,70 ms |
+| 2 | 0,47 ms | −0,45 ms |
+| 3 | 0,49 ms | −0,66 ms |
+| 4 | 0,47 ms | −2,34 ms |
+
+- Mittelwert −1,54 ms, Spannweite 2,25 ms (±1,1 ms). Die Loop-Länge ist in allen Läufen exakt (Δ 0 Frames, alle Schläge innerhalb einer Aufnahme identisch).
+- Die Werte bilden zwei Gruppen, um −0,5 ms und um −2,5 ms. Vermutlich liegt das am Puffer-Raster von USB oder Treiber, das prüfen wir nicht weiter.
+- **Kalibrierter Offset für dieses Setup: `--offset-ms -52.0`.** Daraus wird ein Kalibrier-Assistent in der App (C12).
+- Für den Spike ist das ausreichend: Ziel war ein Versatz von ≤ 5 ms, das ist erreicht. Die Streuung von ±1,1 ms liegt knapp über dem Ziel von ±1 ms, ist aber unhörbar.
+
 ## Fazit
 
-- [ ] A1 Routing:
-- [ ] A2 REC per CC:
-- [ ] A3 MEASURE schließt selbst:
-- [ ] A7 Kanalzahl:
-- [ ] Erreichte Genauigkeit:
-- **Entscheidung:** weiter mit Phase 1 / offline-only / ADR anpassen
+- [x] **A1 Routing:** ✅ Der PC-Ausgang INST2 landet nur am Spur-Eingang INST2 → ADR-0006
+- [x] **A2 REC per CC:** ✅ REC/PLAY und STOP funktionieren über Assigns (CC#21/#26)
+- [x] **A3 MEASURE schließt selbst:** ✅ Das gilt, wenn MEASURE vorab explizit gesetzt ist. Der Wert übersteht das Leeren der Spur. → ADR-0002 akzeptiert
+- [x] **A7 Kanalzahl:** ✅ 4 Stereo-Ausgänge vom PC zur RC (MAIN, MIC, INST1, INST2) und 4 von der RC zum PC (WASAPI)
+- [x] **Erreichte Genauigkeit:** −1,5 ms ± 1,1 ms nach der Kalibrierung, Loop-Länge exakt
+- [x] **A5 A/B-Schreiben:** ✅ siehe `docs/research` (count hexadezimal, jeweils der ältere Slot)
+- [ ] **A4 Import einer selbst geschriebenen WAV:** offen → §7/§8 der Anleitung
+- **Entscheidung:** Live-Teil bleibt. Weiter mit S2 (Storage) und danach Phase 1.
