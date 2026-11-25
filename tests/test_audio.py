@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from rc_505_panel.audio.rcwav import BLOCK, build_rc_wav, read_rc_wav, write_rc_wav
-from rc_505_panel.audio.stretch import fit_length, render, stretch, wsola
+from rc_505_panel.audio.stretch import fit_length, limit_peak, render, stretch, wsola
 from rc_505_panel.audio.tempo import bpm_from_filename, estimate_tempo, loop_candidates, onset_bpm
 from rc_505_panel.core.models import SR, frames_per_bar, loop_frames
 
@@ -94,3 +94,15 @@ def test_wsola_length():
     x = np.random.default_rng(0).standard_normal((44100, 2)).astype(np.float32) * 0.1
     for a in (0.5, 0.8, 1.25, 2.0):
         assert len(wsola(x, a)) == int(round(len(x) * a))
+
+
+def test_limit_peak():
+    x = np.array([[0.5, -0.5]], np.float32)
+    assert limit_peak(x)[1] == 1.0
+    y, g = limit_peak(np.array([[1.5, -2.0]], np.float32))
+    assert g < 1 and abs(np.abs(y).max() - 0.98) < 1e-6
+
+
+def test_render_never_exceeds_full_scale():
+    y, _ = render(click(104, 1) * 3.0, 104, 90, 1, backend="wsola")
+    assert np.abs(y).max() <= 1.0

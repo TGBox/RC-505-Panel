@@ -97,6 +97,18 @@ def stretch(x: np.ndarray, alpha: float, backend: str = "auto") -> np.ndarray:
     raise ValueError(f"Unbekanntes Stretch-Backend: {backend}")
 
 
+def limit_peak(x: np.ndarray, ceiling: float = 0.98) -> tuple[np.ndarray, float]:
+    """Skaliert herunter, falls Samples über 1,0 liegen (das Gerät würde sie abschneiden).
+
+    Gibt (Samples, angewendeter Faktor) zurück; Faktor 1.0 = unverändert.
+    """
+    peak = float(np.abs(x).max()) if len(x) else 0.0
+    if peak <= 1.0:
+        return x, 1.0
+    gain = ceiling / peak
+    return (x * gain).astype(np.float32), gain
+
+
 def fit_length(x: np.ndarray, frames: int) -> np.ndarray:
     """Auf exakt `frames` kürzen bzw. mit Stille auffüllen."""
     if len(x) >= frames:
@@ -118,7 +130,8 @@ def render(x: np.ndarray, src_bpm: float, target_bpm: float, bars: int | None = 
     if bars is None:
         bars = max(1, int(round(len(x) / frames_per_bar(src_bpm))))
     y = stretch(x, src_bpm / target_bpm, backend)
-    return fit_length(y, loop_frames(target_bpm, bars)), bars
+    y, _ = limit_peak(fit_length(y, loop_frames(target_bpm, bars)))
+    return y, bars
 
 
 def default_cache_dir() -> Path:
