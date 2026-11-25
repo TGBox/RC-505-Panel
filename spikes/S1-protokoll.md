@@ -45,9 +45,9 @@ Am Gerät: SYSTEM → MIDI → **Clock Out / Sync Out = ON**. Dann `uv run spike
 
 | Frage | Ergebnis |
 | --- | --- |
-| Startet Spur 1 die Aufnahme? | |
-| Schaltet ein zweiter CC auf Wiedergabe bzw. Overdub? | |
-| Richtiger MIDI-Kanal? (Rx-Kanal am Gerät, `--channel`) | |
+| Startet Spur 1 die Aufnahme? | ✅ ja: CC#21 → TRK1 REC/PLY (2026-11-25) |
+| Schaltet ein zweiter CC auf Wiedergabe bzw. Overdub? | ✅ ja, auf Wiedergabe. Stopp per CC#26 → TRK1 STOP funktioniert auch |
+| Richtiger MIDI-Kanal? (Rx-Kanal am Gerät, `--channel`) | ✅ Kanal 1 (Standard) |
 
 1. USB-Audio auf die Spur, Routing (A1)
 
