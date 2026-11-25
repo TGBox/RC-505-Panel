@@ -9,7 +9,7 @@ Aufruf (uv liest die Abhängigkeiten aus dem Kopf dieser Datei):
     uv run spikes/live_spike.py clock [--seconds 20]
     uv run spikes/live_spike.py cc --cc 21 [--value 127]
     uv run spikes/live_spike.py click --bpm 120 --bars 1 --out click.wav
-    uv run spikes/live_spike.py drop --wav click.wav --cc 21 [--device N] [--offset-ms 0]
+    uv run spikes/live_spike.py drop --wav click.wav --cc 21 [--device "RC-505mk2 INST2 WASAPI"] [--offset-ms 0] [--cc-lead-ms 30]
     uv run spikes/live_spike.py xcorr --ref click.wav --rec "E:/ROLAND/WAVE/001_1/001_1.WAV"
 
 ASIO: vor dem Aufruf `set SD_ENABLE_ASIO=1` (cmd) bzw. `$env:SD_ENABLE_ASIO=1` (PowerShell).
@@ -221,14 +221,19 @@ def cmd_drop(a):
     with sd.OutputStream(device=a.device, samplerate=SR, channels=nch, dtype="float32",
                          latency=a.latency, callback=callback) as stream:
         print(f"Stream-Latenz laut PortAudio: {stream.latency * 1000:.1f} ms")
-        # CC exakt zum Downbeat senden (grob schlafen, dann busy-wait)
-        while (rest := target - time.perf_counter()) > 0.003:
+        # CC zum Downbeat senden, optional früher (bei REC QUANTIZE = MEASURE nötig,
+        # sonst wartet das Gerät bei minimaler Verspätung einen ganzen Takt)
+        cc_at = target - a.cc_lead_ms / 1000.0
+        while (rest := cc_at - time.perf_counter()) > 0.003:
             time.sleep(min(rest - 0.002, 0.05))
-        while time.perf_counter() < target:
+        while time.perf_counter() < cc_at:
             pass
         send_cc(out, a.cc, 127, a.channel)
         t_sent = time.perf_counter()
-        print(f"REC-CC gesendet, Abweichung zum Ziel: {(t_sent - target) * 1000:+.2f} ms")
+        if a.release:
+            send_cc(out, a.cc, 0, a.channel)
+        print(f"REC-CC gesendet {(target - t_sent) * 1000:.2f} ms vor dem Downbeat "
+              f"(Soll: {a.cc_lead_ms:.1f} ms)")
         dur = len(clip) / SR
         if a.close_cc:
             # Fallback (ADR-0002): Aufnahme per zweitem CC schließen
@@ -238,6 +243,8 @@ def cmd_drop(a):
             while time.perf_counter() < close_at:
                 pass
             send_cc(out, a.cc, 127, a.channel)
+            if a.release:
+                send_cc(out, a.cc, 0, a.channel)
             print("Schließ-CC gesendet")
         time.sleep(max(0.0, target + dur + 0.5 - time.perf_counter()))
     inp.close()
@@ -277,6 +284,9 @@ def main(argv=None):
     c.add_argument("--ch0", type=int, default=0, help="erster Ausgangskanal (0 = USB 1/2)")
     c.add_argument("--latency", default="low"); c.add_argument("--offset-ms", type=float, default=0.0)
     c.add_argument("--close-cc", action="store_true", help="Aufnahme per 2. CC schließen (Fallback)")
+    c.add_argument("--cc-lead-ms", type=float, default=0.0,
+                   help="REC-CC so viele ms vor dem Downbeat senden (z. B. 30 bei QUANTIZE=MEASURE)")
+    c.add_argument("--release", action="store_true", help="nach jedem CC sofort Wert 0 senden (MOMENT-Assigns)")
     c = s.add_parser("xcorr"); c.add_argument("--ref", required=True); c.add_argument("--rec", required=True)
     a = p.parse_args(argv)
     if getattr(a, "device", None) is not None and str(a.device).isdigit():

@@ -1,5 +1,7 @@
 # Spike S1 – Protokoll (Live-Machbarkeit)
 
+> **Schritt-für-Schritt-Anleitung:** siehe [`ANLEITUNG-offene-punkte.md`](ANLEITUNG-offene-punkte.md)
+
 **Ziel:** Annahmen A1, A2, A3 und A7 aus der Discovery beantworten.
 **Abbruchkriterium:** Schritt 3 scheitert (keine Aufnahme per MIDI-CC). Dann wird das Projekt offline-only.
 
@@ -24,7 +26,7 @@ Beim ersten `uv run` installiert uv die Abhängigkeiten aus dem Kopf von `live_s
 | Name des MIDI-Ports (IN / OUT) | IN `RC-505MK2 0`, OUT `RC-505MK2 1` ✅ |
 | ASIO als Host-API vorhanden? | ❔ Nicht gelistet, Lauf war ohne `SD_ENABLE_ASIO=1`. Für den Spike reicht WASAPI. |
 | Ausgangskanäle des RC-505-Audiogeräts (ASIO / WASAPI) | WASAPI: 4 Stereo-Endpunkte PC→RC (**MAIN, MIC, INST1, INST2**) und 4 RC→PC (MAIN, SUB1, SUB2, PHONES). Das sind 8×8 Kanäle, A7 ✅ |
-| Index des Geräts für `--device` | WASAPI INST2 = 42 (Indizes ändern sich). Stabiler per Name: `--device "INST2 WASAPI"` |
+| Index des Geräts für `--device` | WASAPI INST2 = 42 (Indizes ändern sich). Stabiler per Name: `--device "RC-505mk2 INST2 WASAPI"` |
 
 1. MIDI-Clock empfangen
 
@@ -51,7 +53,7 @@ Am Gerät: SYSTEM → MIDI → **Clock Out / Sync Out = ON**. Dann `uv run spike
 
 - Click-Datei erzeugen: `uv run spikes/live_spike.py click --bpm 104 --bars 1` (BPM = Tempo des Memory, siehe Schritt 2)
 - Am Gerät die Routing-Einstellungen prüfen: USB IN → LOOP und pro Spur INPUT (MIC, INST, USB).
-- **Neue Hypothese aus Schritt 1:** Der PC speist über eigene Endpunkte ein, die MIC, INST1, INST2 und MAIN heißen. Wenn das Gerät sie wie eigene Eingänge behandelt, gibt man nur der Zielspur INST2 als Input und spielt den Drop über `--device "INST2 WASAPI"` ab. Dann bleiben das echte Mic und die Instrumente auf den anderen Spuren unberührt. Das würde das Kopplungsproblem aus A1 lösen.
+- **Neue Hypothese aus Schritt 1:** Der PC speist über eigene Endpunkte ein, die MIC, INST1, INST2 und MAIN heißen. Wenn das Gerät sie wie eigene Eingänge behandelt, gibt man nur der Zielspur INST2 als Input und spielt den Drop über `--device "RC-505mk2 INST2 WASAPI"` ab. Dann bleiben das echte Mic und die Instrumente auf den anderen Spuren unberührt. Das würde das Kopplungsproblem aus A1 lösen.
 
 | Variante | Landet USB auf der Spur? |
 | --- | --- |
@@ -63,7 +65,7 @@ Am Gerät: SYSTEM → MIDI → **Clock Out / Sync Out = ON**. Dann `uv run spike
 1. Gerät schließt die Aufnahme selbst (A3)
 
 Spur 1: **MEASURE = 1** setzen. Dann `drop` ohne `--close-cc`:
-`uv run spikes/live_spike.py drop --wav click.wav --cc 21 --device "INST2 WASAPI"`
+`uv run spikes/live_spike.py drop --wav click.wav --cc 21 --device "RC-505mk2 INST2 WASAPI"`
 
 | Frage | Ergebnis |
 | --- | --- |
