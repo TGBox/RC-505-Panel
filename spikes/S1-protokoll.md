@@ -62,6 +62,18 @@ Am Gerät: SYSTEM → MIDI → **Clock Out / Sync Out = ON**. Dann `uv run spike
 | Mic und Inst aus | |
 | Routing pro Spur (nur Spur 1 bekommt USB) | |
 
+**Ergebnis 2026-11-25.** Geprüft wurde bei der *Wiedergabe* der Spur (Rhythmus aus), nicht beim Mithören während der Aufnahme. Während der Aufnahme reicht das Gerät USB nur an den Ausgang durch.
+
+| # | PC-Ausgang | TRACK 1 INPUT | Click auf Spur 1? |
+|---|---|---|---|
+| 4e | MAIN | alle aus | ❌ nein |
+| 4e′ | INST2 | alle aus | ❌ nein |
+| 4a | INST2 | nur INST2 L/R | ✅ ja |
+| 4b | INST2 | nur MIC 1 | ❌ nein |
+
+**Fazit A1 ✅:** Der PC-Ausgang „INST2“ (WASAPI-Endpunkt) landet nur am Spur-Eingang INST2. Damit lässt sich USB-Audio gezielt auf eine Spur legen, und INST2 wird der Drop-Kanal.
+**Konsequenz:** Die Buchse INST2 am Gerät bleibt für Drops frei. Ein dort eingestecktes Instrument würde mit aufgenommen (noch nicht getestet).
+
 1. Gerät schließt die Aufnahme selbst (A3)
 
 Spur 1: **MEASURE = 1** setzen. Dann `drop` ohne `--close-cc`:
