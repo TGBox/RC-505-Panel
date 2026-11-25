@@ -74,6 +74,12 @@ Am Gerät: SYSTEM → MIDI → **Clock Out / Sync Out = ON**. Dann `uv run spike
 **Fazit A1 ✅:** Der PC-Ausgang „INST2“ (WASAPI-Endpunkt) landet nur am Spur-Eingang INST2. Damit lässt sich USB-Audio gezielt auf eine Spur legen, und INST2 wird der Drop-Kanal.
 **Konsequenz:** Die Buchse INST2 am Gerät bleibt für Drops frei. Ein dort eingestecktes Instrument würde mit aufgenommen (noch nicht getestet).
 
+**§5a Ergebnis 2026-11-25 – MEASURE schließt selbst (A3) ✅ (mit Bedingung)**
+- 1. Versuch: Die Aufnahme lief nach einem Takt weiter. Danach zeigte MEASURE 8 (die tatsächlich aufgenommene Länge). Die Vorgabe 1 hatte also nicht gegriffen.
+- 2. Versuch, in dieser Reihenfolge: Spur leeren → **danach** LOOP SYNC = ON und MEASURE = 1 setzen → kontrollieren → Drop ohne `--close-cc`. **Die Aufnahme stoppt nach genau einem Takt von selbst.**
+- Vermutung: Das Leeren der Spur setzt MEASURE zurück, oder die erste Einstellung wurde nicht übernommen. Noch zu prüfen.
+- Folge für ADR-0002: Bestätigt, sofern MEASURE vor dem Drop gesetzt ist. MEASURE ist laut Parameter Guide kein Assign-Ziel, lässt sich also nicht per MIDI setzen. Es muss vorab in der `.RC0` stehen, sonst greift der Fallback `--close-cc`.
+
 1. Gerät schließt die Aufnahme selbst (A3)
 
 Spur 1: **MEASURE = 1** setzen. Dann `drop` ohne `--close-cc`:
