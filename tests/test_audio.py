@@ -6,8 +6,7 @@ from rc_505_panel.audio.stretch import fit_length, limit_peak, render, stretch, 
 from rc_505_panel.audio.tempo import bpm_from_filename, estimate_tempo, loop_candidates, onset_bpm
 from rc_505_panel.core.models import SR, frames_per_bar, loop_frames
 
-
-from helpers import click  # noqa: E402
+from .helpers import click
 
 
 # ---------- Gerätekonventionen ----------

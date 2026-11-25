@@ -28,12 +28,14 @@ Option 2. Eine Neuberechnung ist nötig, wenn sich das Memory-Tempo ändert. Die
 ## Entscheidung Bibliothek (Phase 1, 2026-11-25)
 
 Umgesetzt in `audio/stretch.py` mit zwei Backends hinter `stretch(x, alpha, backend="auto")`:
+
 - **Rubber Band (CLI, `--fine` = R3-Engine):** Standard, sobald `rubberband` im PATH liegt. Es wird die CLI genutzt, nicht `pyrubberband`. Das spart eine Python-Abhängigkeit.
 - **Eigene WSOLA (numpy):** Fallback ohne zusätzliche Installation. Fenster 512/256, Suche ±128. Schläge bleiben damit ≤ 3,5 ms an ihrer Taktposition (mit 1024/512/±512 waren es bis zu 11 ms).
 
 **Hörtest:** Freie Aufnahme `t.wav`, ca. 95 → 104 BPM (−8 %), Spur 5 in Memory 98. WSOLA zeigt leichte Verzerrungsartefakte, Rubber Band ist hörbar „ein wenig besser“. Übersteuerung wurde als Ursache ausgeschlossen (Spitze −2,5 dBFS).
 
-**Folgerungen**
+## **Folgerungen**
+
 - Rubber Band ist die empfohlene Installation. Die App weist darauf hin, wenn nur WSOLA verfügbar ist.
 - Jedes Stretching um mehrere Prozent bleibt hörbar. Die UI bietet deshalb als Alternative **„Memory-Tempo an das Sample anpassen“** an (kein Stretch). Das ist sinnvoll, wenn das Sample die erste Spur eines Memory wird.
 - Nach dem Rendern begrenzt `limit_peak` auf ≤ 0,98, falls Samples über 1,0 liegen (das Gerät würde sonst abschneiden).

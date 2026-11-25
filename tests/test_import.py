@@ -3,12 +3,13 @@ import shutil
 import numpy as np
 import pytest
 
-from helpers import click
 from rc_505_panel.audio.convert import write_float_wav
 from rc_505_panel.audio.rcwav import read_rc_wav
 from rc_505_panel.core.models import TrackRef, loop_frames
 from rc_505_panel.storage.backup import backup_memory, find_roland_root, restore_memory
 from rc_505_panel.storage.track_import import import_file, import_samples
+
+from .helpers import click
 
 
 @pytest.fixture

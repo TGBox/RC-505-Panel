@@ -268,7 +268,7 @@ rc505mk2-studio/
 ## 10. Stand nach Phase 1 (2026-11-25) – Abweichungen vom Plan
 
 | Thema | Plan (§3) | Umgesetzt / belegt |
-|---|---|---|
+| --- | --- | --- |
 | Spur-Import (C7) | WAV schreiben + `TRACKn/X` in `.RC0` setzen | **Nur WAV schreiben.** Das Gerät ergänzt `TRACKn` U/V/W/X beim Laden selbst (S2). Die `.RC0` bleibt unberührt. |
 | `Rc0Document` | `get(section, key)` | `get(path)` / `set(path, value)` mit Pfad wie `mem/TRACK1/X`, weil Sektionsnamen in `ifx` und `tfx` doppelt vorkommen |
 | Loop-Länge | `round(bars·4·60/bpm·44100)` | wie das Gerät: `bars × floor(4·60·44100/bpm)` (`core.models.loop_frames`, belegt mit 91 und 104 BPM) |
