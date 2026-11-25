@@ -273,9 +273,9 @@ def cmd_drop(a):
             send_cc(out, a.cc, 0, a.channel)
         print(f"REC-CC gesendet {(target - t_sent) * 1000:.2f} ms vor dem Downbeat "
               f"(Soll: {a.cc_lead_ms:.1f} ms)")
-        bar, pos = divmod(tick_at_send, TICKS_PER_BAR)
+        bar_no, bar_pos = divmod(tick_at_send, TICKS_PER_BAR)  # nicht 'pos' – das nutzt der Audio-Callback
         print(f"Diagnose: START empfangen {f.starts}x, CC bei Tick {tick_at_send} "
-              f"= Takt {bar + 1}, Position {pos}/{TICKS_PER_BAR} (erwartet: {TICKS_PER_BAR - 1}/{TICKS_PER_BAR} oder 0), "
+              f"= Takt {bar_no + 1}, Position {bar_pos}/{TICKS_PER_BAR} (erwartet: ~{TICKS_PER_BAR - 2}–{TICKS_PER_BAR - 1}), "
               f"Ziel-Downbeat {(target - f.start_time):.3f} s nach START, "
               f"Taktlänge {TICKS_PER_BAR * f.tick_interval:.3f} s")
         dur = len(clip) / SR
