@@ -48,6 +48,7 @@ class ClockFollower:
         self.intervals: list[float] = []
         self.orphan_ticks = 0         # Clock-Ticks ohne vorheriges START (Position unbekannt)
         self.starts = 0               # Anzahl empfangener START-Meldungen (Diagnose)
+        self.history: list[tuple[int, float]] = []  # (Tick, Ankunftszeit) seit START
         self.start_time: float | None = None
         self.lock = threading.Lock()
 
@@ -58,6 +59,7 @@ class ClockFollower:
                 self.running, self.tick, self.last_tick_time = True, 0, None
                 self.starts += 1
                 self.start_time = t
+                self.history = []
                 self.intervals.clear()
             elif msg_type == "stop":
                 self.running = False
@@ -71,6 +73,8 @@ class ClockFollower:
                     self.intervals = self.intervals[-PPQN * 2:]
                     self.tick += 1
                 self.last_tick_time = t
+                self.history.append((self.tick, t))
+                self.history = self.history[-4 * TICKS_PER_BAR:]
 
     @property
     def tick_interval(self) -> float | None:
@@ -81,6 +85,20 @@ class ClockFollower:
     def bpm(self) -> float | None:
         ti = self.tick_interval
         return 60.0 / (ti * PPQN) if ti else None
+
+    def time_of_tick(self, k: int) -> tuple[float, float] | None:
+        """Zeitpunkt von Tick k per Ausgleichsgerade über die letzten Ticks (glättet USB-Jitter).
+        Gibt (Zeit, Residuen-Std in ms) zurück."""
+        import numpy as np
+        with self.lock:
+            h = list(self.history)
+        if len(h) < PPQN:
+            return None
+        ks = np.array([x[0] for x in h], dtype=float)
+        ts = np.array([x[1] for x in h])
+        slope, icpt = np.polyfit(ks - ks[0], ts - ts[0], 1)
+        resid = (ts - ts[0]) - (slope * (ks - ks[0]) + icpt)
+        return ts[0] + icpt + slope * (k - ks[0]), float(resid.std() * 1000)
 
     def next_downbeat(self) -> float | None:
         """Geschätzte perf_counter-Zeit des nächsten Taktanfangs."""
@@ -202,7 +220,6 @@ def cmd_click(a):
 
 
 def cmd_drop(a):
-    import numpy as np
     import sounddevice as sd
 
     clip = read_any_wav(a.wav)
@@ -211,73 +228,92 @@ def cmd_drop(a):
     out, inp = open_midi(a.port, f)
     print("Warte auf laufende Clock… (ALL START am Gerät, falls noch nicht gestartet)")
     warned = False
-    while f.next_downbeat() is None:
+    while f.next_downbeat() is None or f.time_of_tick(0) is None:
         if f.orphan_ticks > PPQN and not warned:
             print("Clock läuft, aber das START-Signal kam vor dem Skriptstart – Taktposition unbekannt.\n"
                   "→ Am Gerät STOP drücken und dann erneut ALL START.")
             warned = True
         time.sleep(0.05)
     print(f"Clock läuft: {f.bpm:.2f} BPM")
-
-    # Ziel: übernächster Downbeat (genug Vorlauf für Stream-Start)
-    target = f.next_downbeat()
-    if target - time.perf_counter() < 0.5:
-        target += TICKS_PER_BAR * f.tick_interval
-    audio_target = target + a.offset_ms / 1000.0
     starts_at_plan = f.starts  # kommt danach ein weiteres START/STOP, ist das Ziel ungültig
 
-    pos = {"i": None}
-    clock_map = {}  # Zuordnung Stream-Zeit -> perf_counter, beim ersten Callback
+    # Ziel = Taktanfang als Tick-Nummer festlegen; die Zeit dazu wird bis kurz vorher nachgeschärft
+    target_tick = (f.tick // TICKS_PER_BAR + 1) * TICKS_PER_BAR
+    if f.time_of_tick(target_tick)[0] - time.perf_counter() < 0.8:
+        target_tick += TICKS_PER_BAR
+
+    state = {"audio_target": None, "delta": None, "i": None}
 
     def callback(outdata, frames, tinfo, status):
         if status:
             print("Audio-Status:", status, file=sys.stderr)
-        if "delta" not in clock_map:
-            clock_map["delta"] = time.perf_counter() - tinfo.currentTime
         outdata.fill(0)
-        dac = tinfo.outputBufferDacTime + clock_map["delta"]  # perf_counter-Zeit des 1. Samples
-        if pos["i"] is None:
-            start = round((audio_target - dac) * SR)
+        at, delta = state["audio_target"], state["delta"]
+        if at is None or delta is None:
+            return
+        dac = tinfo.outputBufferDacTime + delta  # perf_counter-Zeit des 1. Samples dieses Puffers
+        if state["i"] is None:
+            start = round((at - dac) * SR)
             if start >= frames:
                 return
-            pos["i"] = -start  # negativ = Startoffset innerhalb dieses Puffers
-        i = pos["i"]
+            state["i"] = -start  # negativ = Startoffset innerhalb dieses Puffers
+        i = state["i"]
         dst0 = max(0, -i)
         src0 = max(0, i)
         n = min(frames - dst0, len(clip) - src0)
         if n > 0:
             outdata[dst0:dst0 + n, a.ch0:a.ch0 + 2] = clip[src0:src0 + n]
-        pos["i"] = i + frames
+        state["i"] = i + frames
         if src0 + n >= len(clip):
             raise sd.CallbackStop
+
+    def abort_if_restarted(stream):
+        if f.starts != starts_at_plan or not f.running:
+            stream.abort()
+            sys.exit("Abbruch: START/STOP am Gerät während der Wartezeit – Taktposition hat sich geändert.\n"
+                     "Spur prüfen/leeren und den Drop neu starten (STOP + ALL START nur einmal drücken).")
 
     nch = a.ch0 + 2
     with sd.OutputStream(device=device, samplerate=SR, channels=nch, dtype="float32",
                          latency=a.latency, callback=callback) as stream:
         print(f"Stream-Latenz laut PortAudio: {stream.latency * 1000:.1f} ms")
-        # CC zum Downbeat senden, optional früher (bei REC QUANTIZE = MEASURE nötig,
-        # sonst wartet das Gerät bei minimaler Verspätung einen ganzen Takt)
+        # PC-Uhr ↔ Audio-Uhr: viele Paare im Hauptthread lesen, die schnellsten Lesungen mitteln
+        pairs = []
+        for _ in range(40):
+            t1 = time.perf_counter(); st = stream.time; t2 = time.perf_counter()
+            pairs.append((t2 - t1, (t1 + t2) / 2 - st))
+            time.sleep(0.002)
+        pairs.sort()
+        best = [d for _, d in pairs[:10]]
+        state["delta"] = sum(best) / len(best)
+        delta_spread = (max(best) - min(best)) * 1000
+
+        # Taktanfang laufend per Ausgleichsgerade neu schätzen, 150 ms vor Audiostart einfrieren
+        while True:
+            abort_if_restarted(stream)
+            target, jitter = f.time_of_tick(target_tick)
+            at = target + a.offset_ms / 1000.0
+            if at - time.perf_counter() < 0.15:
+                break
+            state["audio_target"] = at
+            time.sleep(0.01)
+        state["audio_target"] = at
+        print(f"Diagnose: Clock-Jitter (Std der Ticks um die Gerade) {jitter:.2f} ms, "
+              f"Uhrenabgleich-Streuung {delta_spread:.3f} ms, Ziel-Tick {target_tick} "
+              f"(Takt {target_tick // TICKS_PER_BAR + 1}), START empfangen {f.starts}x")
+
+        # CC zum Downbeat senden, optional früher (bei REC QUANTIZE = MEASURE nötig)
         cc_at = target - a.cc_lead_ms / 1000.0
         while (rest := cc_at - time.perf_counter()) > 0.003:
-            if f.starts != starts_at_plan or not f.running:
-                stream.abort()
-                sys.exit("Abbruch: START/STOP am Gerät während der Wartezeit – Taktposition hat sich geändert.\n"
-                         "Spur prüfen/leeren und den Drop neu starten (STOP + ALL START nur einmal drücken).")
             time.sleep(min(rest - 0.002, 0.05))
         while time.perf_counter() < cc_at:
             pass
         send_cc(out, a.cc, 127, a.channel)
         t_sent = time.perf_counter()
-        tick_at_send = f.tick
         if a.release:
             send_cc(out, a.cc, 0, a.channel)
         print(f"REC-CC gesendet {(target - t_sent) * 1000:.2f} ms vor dem Downbeat "
               f"(Soll: {a.cc_lead_ms:.1f} ms)")
-        bar_no, bar_pos = divmod(tick_at_send, TICKS_PER_BAR)  # nicht 'pos' – das nutzt der Audio-Callback
-        print(f"Diagnose: START empfangen {f.starts}x, CC bei Tick {tick_at_send} "
-              f"= Takt {bar_no + 1}, Position {bar_pos}/{TICKS_PER_BAR} (erwartet: ~{TICKS_PER_BAR - 2}–{TICKS_PER_BAR - 1}), "
-              f"Ziel-Downbeat {(target - f.start_time):.3f} s nach START, "
-              f"Taktlänge {TICKS_PER_BAR * f.tick_interval:.3f} s")
         dur = len(clip) / SR
         if a.close_cc:
             # Fallback (ADR-0002): Aufnahme per zweitem CC schließen
@@ -295,21 +331,52 @@ def cmd_drop(a):
     print("Fertig. Jetzt Spur am Gerät prüfen, dann für 'xcorr' in den STORAGE-Modus wechseln.")
 
 
+def beat_offsets(ref, rec, bpm: float):
+    """Versatz pro Schlag (Frames, + = Aufnahme später). Schlag 1 wird übersprungen,
+    weil er bei zu frühem Audio am Loop-Anfang abgeschnitten wird."""
+    import numpy as np
+    beat = 60.0 / bpm * SR
+    half = int(beat / 2)
+    n_beats = int(round(len(ref) / beat))
+    out = []
+    for k in range(1, n_beats):
+        c = int(round(k * beat))
+        lo, hi = c - half, c + half
+        if lo < 0 or hi > len(ref) or hi > len(rec):
+            continue
+        r, x = ref[lo:hi], rec[lo:hi]
+        n = 1 << int(np.ceil(np.log2(2 * len(r))))
+        cc = np.fft.irfft(np.fft.rfft(x, n) * np.conj(np.fft.rfft(r, n)), n)
+        lag = int(np.argmax(cc))
+        if lag > n // 2:
+            lag -= n
+        if abs(lag) < half:
+            out.append(lag)
+    return out
+
+
 def cmd_xcorr(a):
     import numpy as np
     ref = read_any_wav(a.ref).mean(axis=1)
     rec = read_any_wav(a.rec).mean(axis=1)
-    # Loops sind zyklisch: zirkuläre Kreuzkorrelation über die Länge der Aufnahme
-    L = len(rec)
-    ref_l = np.zeros(L, dtype=ref.dtype)
-    ref_l[: min(L, len(ref))] = ref[:L]
-    c = np.fft.irfft(np.fft.rfft(rec) * np.conj(np.fft.rfft(ref_l)), L)
-    lag = int(np.argmax(c))
-    lag = ((lag + L // 2) % L) - L // 2  # auf ±halbe Loop-Länge abbilden
     print(f"Längen: ref={len(ref)} rec={len(rec)} Frames (Δ {len(rec) - len(ref):+d})")
-    print(f"Versatz: {lag:+d} Frames = {lag / SR * 1000:+.2f} ms "
-          f"({'Aufnahme kommt zu spät' if lag > 0 else 'Aufnahme kommt zu früh' if lag < 0 else 'exakt'})")
-    print(f"→ nächster Versuch mit --offset-ms {-lag / SR * 1000:.2f} (relativ zum bisherigen Wert)")
+    bpm = a.bpm
+    if bpm is None:  # aus der Click-Länge schätzen: ganze Takte à 4 Schläge
+        for bars in range(1, 17):
+            cand = bars * 4 * 60 * SR / len(ref)
+            if 40 <= cand <= 250:
+                bpm = cand
+                break
+    lags = beat_offsets(ref, rec, bpm)
+    if not lags:
+        sys.exit("Keine Schläge auswertbar – passt die Aufnahme zur Click-Datei?")
+    med = float(np.median(lags))
+    print(f"Tempo (aus Click-Länge): {bpm:.2f} BPM, ausgewertet: Schläge 2–{len(lags) + 1}")
+    print("Pro Schlag: " + ", ".join(f"{l:+d}" for l in lags) + " Frames")
+    print(f"Versatz: {med:+.0f} Frames = {med / SR * 1000:+.2f} ms "
+          f"({'Aufnahme kommt zu spät' if med > 0 else 'Aufnahme kommt zu früh' if med < 0 else 'exakt'}), "
+          f"Streuung innerhalb der Aufnahme {(max(lags) - min(lags)) / SR * 1000:.2f} ms")
+    print(f"→ nächster Versuch mit --offset-ms {-med / SR * 1000:.2f} (relativ zum bisherigen Wert)")
 
 
 def main(argv=None):
@@ -332,6 +399,7 @@ def main(argv=None):
                    help="REC-CC so viele ms vor dem Downbeat senden (z. B. 30 bei QUANTIZE=MEASURE)")
     c.add_argument("--release", action="store_true", help="nach jedem CC sofort Wert 0 senden (MOMENT-Assigns)")
     c = s.add_parser("xcorr"); c.add_argument("--ref", required=True); c.add_argument("--rec", required=True)
+    c.add_argument("--bpm", type=float, default=None, help="Tempo des Clicks (Standard: aus der Länge geschätzt)")
     a = p.parse_args(argv)
     if getattr(a, "device", None) is not None and str(a.device).isdigit():
         a.device = int(a.device)
